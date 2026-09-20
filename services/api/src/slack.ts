@@ -114,7 +114,8 @@ export function decisionBlocks(
   alertDescription: string,
   report: IncidentReport,
   decision: "approved" | "rejected",
-  decidedBy: string
+  decidedBy: string,
+  remediationDetail?: string
 ) {
   const blocks: unknown[] = reportBlocks(incidentId, alertDescription, report).filter(
     (b) => (b as { block_id?: string }).block_id !== "incident_actions"
@@ -131,6 +132,12 @@ export function decisionBlocks(
       },
     ],
   });
+  if (remediationDetail) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: remediationDetail }],
+    });
+  }
   return blocks;
 }
 

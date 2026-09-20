@@ -3,6 +3,13 @@ import type { IncidentReport } from "agent";
 
 export type IncidentStatus = "investigating" | "awaiting_approval" | "approved" | "rejected";
 
+export interface RemediationOutcome {
+  actionId?: string;
+  success: boolean;
+  detail: string;
+  executedAt: string;
+}
+
 export interface Incident {
   id: string;
   alertDescription: string;
@@ -13,6 +20,7 @@ export interface Incident {
   createdAt: string;
   decidedBy?: string;
   decidedAt?: string;
+  remediation?: RemediationOutcome;
 }
 
 // In-memory for now -- swap for Postgres once there's more than one process

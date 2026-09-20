@@ -26,7 +26,16 @@ export const submitReportTool = {
       },
       suggestedAction: {
         type: "string",
-        description: "A concrete, specific remediation suggestion. Omit if none applies.",
+        description: "A concrete, human-readable remediation suggestion. Omit if none applies.",
+      },
+      suggestedActionId: {
+        type: "string",
+        enum: ["disable_bug_mode"],
+        description:
+          "If the suggested action matches one of these known, automatable remediations, " +
+          "name it here so it can be executed on approval. This must be one of the exact " +
+          "enum values -- never invent a new one. Omit if no automatable action applies; " +
+          "the suggestion will still be shown to the human as text.",
       },
       insufficientEvidence: {
         type: "boolean",
@@ -43,5 +52,6 @@ export interface IncidentReport {
   confidence: number;
   evidence: string[];
   suggestedAction?: string;
+  suggestedActionId?: "disable_bug_mode";
   insufficientEvidence: boolean;
 }

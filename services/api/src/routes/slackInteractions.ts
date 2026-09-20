@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { getIncident, updateIncident } from "../incidentStore.js";
 import { decisionBlocks, updateSlackMessage, verifySlackSignature } from "../slack.js";
+import { getRemediationAction, isIncidentStillActive } from "../remediation.js";
 
 interface SlackBlockAction {
   action_id: string;
@@ -42,7 +43,58 @@ export function registerSlackInteractionsRoute(app: FastifyInstance) {
       return reply.code(200).send();
     }
 
+    // Guards against a double-click or a duplicate delivery re-running remediation.
+    if (incident.status !== "awaiting_approval") {
+      request.log.warn(
+        { incidentId: incident.id, status: incident.status },
+        "Ignoring interaction for an already-decided incident"
+      );
+      return reply.code(200).send();
+    }
+
     const decision = action.action_id === "approve_remediation" ? "approved" : "rejected";
+    let remediationDetail: string | undefined;
+
+    if (decision === "approved") {
+      const remediationAction = getRemediationAction(incident.report.suggestedActionId);
+
+      if (!remediationAction) {
+        remediationDetail = "ℹ️ No automatable action for this incident -- approval noted only.";
+      } else {
+        const stillActive = await isIncidentStillActive().catch((err) => {
+          request.log.warn({ err }, "Could not revalidate incident state, proceeding anyway");
+          return true;
+        });
+
+        if (!stillActive) {
+          remediationDetail = "ℹ️ Skipped -- error rate already back to normal by the time this was approved.";
+          updateIncident(incident.id, {
+            remediation: {
+              success: true,
+              detail: "skipped: no longer active",
+              executedAt: new Date().toISOString(),
+            },
+          });
+        } else {
+          const result = await remediationAction.execute().catch((err) => ({
+            success: false,
+            detail: String(err),
+          }));
+          remediationDetail = result.success
+            ? `✅ Action executed: ${result.detail}`
+            : `⚠️ Action failed: ${result.detail}`;
+          updateIncident(incident.id, {
+            remediation: {
+              actionId: remediationAction.id,
+              success: result.success,
+              detail: result.detail,
+              executedAt: new Date().toISOString(),
+            },
+          });
+        }
+      }
+    }
+
     updateIncident(incident.id, {
       status: decision,
       decidedBy: payload.user.id,
@@ -50,10 +102,8 @@ export function registerSlackInteractionsRoute(app: FastifyInstance) {
     });
 
     request.log.info(
-      { incidentId: incident.id, decision, decidedBy: payload.user.id },
-      decision === "approved"
-        ? "Remediation approved -- no remediation action layer wired up yet"
-        : "Remediation rejected"
+      { incidentId: incident.id, decision, decidedBy: payload.user.id, remediationDetail },
+      "Incident decision recorded"
     );
 
     if (incident.slackChannel && incident.slackMessageTs) {
@@ -62,7 +112,8 @@ export function registerSlackInteractionsRoute(app: FastifyInstance) {
         incident.alertDescription,
         incident.report,
         decision,
-        payload.user.id
+        payload.user.id,
+        remediationDetail
       );
       await updateSlackMessage(
         incident.slackChannel,
