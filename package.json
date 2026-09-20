@@ -4,5 +4,8 @@
   "workspaces": [
     "apps/*",
     "services/*"
-  ]
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
 }
