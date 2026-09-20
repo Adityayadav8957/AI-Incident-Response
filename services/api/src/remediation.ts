@@ -1,5 +1,9 @@
 const DEMO_APP_URL = process.env.DEMO_APP_URL ?? "http://localhost:3300";
 const ELASTICSEARCH_URL = process.env.ELASTICSEARCH_URL ?? "http://localhost:9200";
+const ELASTICSEARCH_INDEX = process.env.ELASTICSEARCH_INDEX ?? "filebeat-8.15.0";
+const ELASTICSEARCH_API_KEY = process.env.ELASTICSEARCH_API_KEY;
+const MONITORED_CONTAINER_NAME =
+  process.env.MONITORED_CONTAINER_NAME ?? "ai_incident-demo-app-1";
 
 export interface RemediationResult {
   success: boolean;
@@ -49,9 +53,12 @@ export function getRemediationAction(id: string | undefined): RemediationAction 
  * than silently blocking a real fix on a flaky observability query.
  */
 export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolean> {
-  const res = await fetch(`${ELASTICSEARCH_URL}/filebeat-8.15.0/_search`, {
+  const res = await fetch(`${ELASTICSEARCH_URL}/${ELASTICSEARCH_INDEX}/_search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(ELASTICSEARCH_API_KEY ? { Authorization: `ApiKey ${ELASTICSEARCH_API_KEY}` } : {}),
+    },
     body: JSON.stringify({
       size: 50,
       sort: [{ "@timestamp": "desc" }],
@@ -59,7 +66,7 @@ export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolea
         bool: {
           filter: [
             { range: { "@timestamp": { gte: `now-${lookbackMinutes}m` } } },
-            { match: { "container.name": "ai_incident-demo-app-1" } },
+            { match: { "container.name": MONITORED_CONTAINER_NAME } },
           ],
         },
       },

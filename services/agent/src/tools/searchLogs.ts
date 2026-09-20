@@ -1,4 +1,6 @@
 const ELASTICSEARCH_URL = process.env.ELASTICSEARCH_URL ?? "http://localhost:9200";
+const ELASTICSEARCH_INDEX = process.env.ELASTICSEARCH_INDEX ?? "filebeat-8.15.0";
+const ELASTICSEARCH_API_KEY = process.env.ELASTICSEARCH_API_KEY;
 
 export const searchLogsTool = {
   name: "search_logs",
@@ -52,9 +54,12 @@ export async function searchLogs(input: SearchLogsInput): Promise<unknown> {
     filter.push({ match: { level: input.level } });
   }
 
-  const res = await fetch(`${ELASTICSEARCH_URL}/filebeat-8.15.0/_search`, {
+  const res = await fetch(`${ELASTICSEARCH_URL}/${ELASTICSEARCH_INDEX}/_search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(ELASTICSEARCH_API_KEY ? { Authorization: `ApiKey ${ELASTICSEARCH_API_KEY}` } : {}),
+    },
     body: JSON.stringify({
       size: limit,
       sort: [{ "@timestamp": "desc" }],
