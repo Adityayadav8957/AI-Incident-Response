@@ -1,15 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 import { searchLogs, searchLogsTool } from "./tools/searchLogs.js";
+import { getRecentDeploys, getRecentDeploysTool } from "./tools/getRecentDeploys.js";
 import { submitReportTool, type IncidentReport } from "./tools/submitReport.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_ITERATIONS = 8;
 
 const SYSTEM_PROMPT = `You are an SRE incident investigation agent. You will be given an
-alert describing a production issue. Use the search_logs tool to gather evidence -- check
-error patterns, timing, and whether the issue correlates with a recent change (e.g. a
-"bugMode" flag flipping on, a spike in a specific status code, etc).
+alert describing a production issue. Use search_logs to gather evidence -- check error
+patterns, timing, and whether the issue correlates with a recent change (e.g. a "bugMode"
+flag flipping on, a spike in a specific status code, etc). Use get_recent_deploys to check
+whether a code change lines up with when the errors started -- a root cause is much more
+credible when it's backed by both a log pattern and a correlated deploy.
 
 Be skeptical of your first hypothesis. Look for corroborating evidence before concluding.
 If the logs don't support a confident root cause, say so explicitly rather than guessing --
@@ -19,7 +22,11 @@ When you're done investigating, call submit_incident_report exactly once with yo
 
 const client = new Anthropic();
 
-const tools: Tool[] = [searchLogsTool as Tool, submitReportTool as Tool];
+const tools: Tool[] = [
+  searchLogsTool as Tool,
+  getRecentDeploysTool as Tool,
+  submitReportTool as Tool,
+];
 
 export interface InvestigationStep {
   tool: string;
@@ -35,6 +42,9 @@ export interface InvestigationResult {
 async function runTool(name: string, input: Record<string, unknown>): Promise<unknown> {
   if (name === "search_logs") {
     return searchLogs(input);
+  }
+  if (name === "get_recent_deploys") {
+    return getRecentDeploys(input);
   }
   throw new Error(`Unknown tool: ${name}`);
 }
