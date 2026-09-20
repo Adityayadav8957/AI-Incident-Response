@@ -46,13 +46,14 @@ export function getRemediationAction(id: string | undefined): RemediationAction 
 }
 
 /**
- * Re-checks the actual error rate right before executing, rather than trusting
- * that conditions from when the report was generated still hold -- an approval
- * clicked minutes later could be acting on a situation that already resolved
- * itself. If the check itself fails, we err on the side of proceeding rather
- * than silently blocking a real fix on a flaky observability query.
+ * Fraction of recent log entries at level "error" for the given container,
+ * over the given lookback window. Returns 0 if there are no entries at all
+ * (nothing to be alarmed about) rather than throwing or returning NaN.
  */
-export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolean> {
+export async function getErrorRate(
+  containerName: string,
+  lookbackMinutes: number
+): Promise<number> {
   const res = await fetch(`${ELASTICSEARCH_URL}/${ELASTICSEARCH_INDEX}/_search`, {
     method: "POST",
     headers: {
@@ -66,7 +67,7 @@ export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolea
         bool: {
           filter: [
             { range: { "@timestamp": { gte: `now-${lookbackMinutes}m` } } },
-            { match: { "container.name": MONITORED_CONTAINER_NAME } },
+            { match: { "container.name": containerName } },
           ],
         },
       },
@@ -81,8 +82,22 @@ export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolea
     hits: { hits: { _source: Record<string, unknown> }[] };
   };
   const entries = body.hits.hits;
-  if (entries.length === 0) return false;
+  if (entries.length === 0) return 0;
 
   const errorCount = entries.filter((h) => h._source.level === "error").length;
-  return errorCount / entries.length > 0.1;
+  return errorCount / entries.length;
+}
+
+const ACTIVE_ERROR_RATE_THRESHOLD = 0.1;
+
+/**
+ * Re-checks the actual error rate right before executing, rather than trusting
+ * that conditions from when the report was generated still hold -- an approval
+ * clicked minutes later could be acting on a situation that already resolved
+ * itself. If the check itself fails, we err on the side of proceeding rather
+ * than silently blocking a real fix on a flaky observability query.
+ */
+export async function isIncidentStillActive(lookbackMinutes = 2): Promise<boolean> {
+  const rate = await getErrorRate(MONITORED_CONTAINER_NAME, lookbackMinutes);
+  return rate > ACTIVE_ERROR_RATE_THRESHOLD;
 }

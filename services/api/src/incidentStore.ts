@@ -50,3 +50,10 @@ export function updateIncident(id: string, patch: Partial<Incident>): Incident |
   incidents.set(id, updated);
   return updated;
 }
+
+// Used by the watcher to avoid piling on a new investigation while one is
+// still awaiting a human decision -- otherwise a sustained error spike would
+// fire a fresh incident (and Slack message) every check interval.
+export function hasOpenIncident(): boolean {
+  return [...incidents.values()].some((i) => i.status === "awaiting_approval");
+}
