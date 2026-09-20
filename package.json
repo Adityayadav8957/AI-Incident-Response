@@ -1,0 +1,8 @@
+{
+  "name": "ai-incident-response",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ]
+}
